@@ -1,0 +1,102 @@
+type: custom:html-pro-card
+do_not_parse: true
+content: |
+  <style>
+    :root {
+      --card-bg: var(--ha-card-background, var(--card-background-color, #fff));
+      --text: var(--primary-text-color, #1c1c1e);
+      --sec-text: var(--secondary-text-color, #8e8e93);
+      --accent: var(--accent-color, #007aff);
+      --border: var(--divider-color, rgba(60,60,67,0.12));
+    }
+    .claw-panel { padding: 12px; font-family: -apple-system, 'SF Pro Display', sans-serif; color: var(--text); }
+    .claw-panel h2 { font-size: 18px; font-weight: 600; margin: 0 0 16px; }
+    .section { margin-bottom: 20px; }
+    .section-title { font-size: 13px; font-weight: 500; color: var(--sec-text); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .row:last-child { border-bottom: none; }
+    .label { font-size: 15px; }
+    .desc { font-size: 12px; color: var(--sec-text); margin-top: 2px; }
+    select, button { font-size: 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); padding: 6px 12px; cursor: pointer; }
+    button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-group { display: flex; gap: 6px; }
+    .toggle { position: relative; width: 44px; height: 26px; cursor: pointer; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .slider-track { position: absolute; inset: 0; background: #e9e9ea; border-radius: 13px; transition: .3s; }
+    .toggle input:checked + .slider-track { background: var(--accent); }
+    .slider-knob { position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; background: #fff; border-radius: 50%; transition: .3s; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+    .toggle input:checked + .slider-track .slider-knob { transform: translateX(18px); }
+  </style>
+  <div class="claw-panel" id="clawPanel">
+    <h2>Claw Assistant 配置</h2>
+    <div id="clawConfigContent">加载中...</div>
+  </div>
+  <script>
+    var root = document.querySelector('html-pro-card') || document.querySelector('ha-card') || document.body;
+    root._watchedEntities = ['sensor.claw_config', 'sensor.'];
+    root._onHassUpdate = function(hass) {
+      var configState = hass.states['sensor.claw_config'];
+      if (!configState || !configState.attributes) { return; }
+      var opts = configState.attributes;
+      var html = '';
+
+      // Agent 选择
+      var agents = Object.keys(hass.states).filter(function(e) { return e.startsWith('conversation.') && e !== 'conversation.claw_assistant'; });
+      html += '<div class="section"><div class="section-title">AI 智能体</div><div class="row"><div class="label">对话智能体</div>';
+      html += '<select onchange="root.callService(\'claw_plus\', \'set_option\', {key:\'agent\', value: this.value})">';
+      agents.forEach(function(a) {
+        var sel = (opts.agent === a || opts.agent === hass.states[a].state) ? 'selected' : '';
+        html += '<option value="' + a + '" ' + sel + '>' + a.replace('conversation.', '') + '</option>';
+      });
+      html += '</select></div></div>';
+
+      // 代理设置
+      html += '<div class="section"><div class="section-title">代理与网络</div>';
+      var proxyVal = opts.proxy || opts.proxy_url || '';
+      html += '<div class="row"><div class="label">代理地址</div>';
+      html += '<select onchange="root.callService(\'claw_plus\', \'set_option\', {key:\'proxy\', value: this.value})">';
+      var proxies = ['', 'http://127.0.0.1:7890', 'http://127.0.0.1:10809', 'socks5://127.0.0.1:10808'];
+      proxies.forEach(function(p) {
+        var sel = (proxyVal === p) ? 'selected' : '';
+        var label = p || '无代理';
+        html += '<option value="' + p + '" ' + sel + '>' + label + '</option>';
+      });
+      html += '</select></div>';
+
+      // Web 搜索开关
+      html += '<div class="row"><div class="label">联网搜索<div class="desc">启用 Web 搜索能力</div></div>';
+      var webSearch = opts.enable_web_search === true || opts.enable_web_search === 'true';
+      html += '<label class="toggle"><input type="checkbox" ' + (webSearch ? 'checked' : '') + ' onchange="root.callService(\'claw_plus\', \'set_option\', {key:\'enable_web_search\', value: this.checked})"><span class="slider-track"><span class="slider-knob"></span></span></label></div>';
+
+      // 图片生成开关
+      html += '<div class="row"><div class="label">图片生成<div class="desc">允许 AI 生成图片</div></div>';
+      var imgGen = opts.enable_image_generation === true || opts.enable_image_generation === 'true';
+      html += '<label class="toggle"><input type="checkbox" ' + (imgGen ? 'checked' : '') + ' onchange="root.callService(\'claw_plus\', \'set_option\', {key:\'enable_image_generation\', value: this.checked})"><span class="slider-track"><span class="slider-knob"></span></span></label></div>';
+
+      // 语音开关
+      html += '<div class="row"><div class="label">语音交互<div class="desc">启用语音对话</div></div>';
+      var voice = opts.enable_voice === true || opts.enable_voice === 'true';
+      html += '<label class="toggle"><input type="checkbox" ' + (voice ? 'checked' : '') + ' onchange="root.callService(\'claw_plus\', \'set_option\', {key:\'enable_voice\', value: this.checked})"><span class="slider-track"><span class="slider-knob"></span></span></label></div>';
+
+      // 调试模式
+      html += '<div class="row"><div class="label">调试模式<div class="desc">输出详细日志</div></div>';
+      var debug = opts.debug === true || opts.debug === 'true';
+      html += '<label class="toggle"><input type="checkbox" ' + (debug ? 'checked' : '') + ' onchange="root.callService(\'claw_plus\', \'set_option\', {key:\'debug\', value: this.checked})"><span class="slider-track"><span class="slider-knob"></span></span></label></div>';
+
+      html += '</div>';
+
+      // 回复模式
+      html += '<div class="section"><div class="section-title">回复模式</div><div class="row">';
+      var mode = opts.reply_mode || 'direct';
+      html += '<div class="btn-group">';
+      [['direct', '直接回复'], ['smart', '智能模式'], ['confirm', '确认后回复']].forEach(function(m) {
+        var cls = (mode === m[0]) ? 'active' : '';
+        html += '<button class="' + cls + '" onclick="root.callService(\'claw_plus\', \'set_option\', {key:\'reply_mode\', value:\'' + m[0] + '\'});this.parentElement.querySelectorAll(\'button\').forEach(function(b){b.classList.remove(\'active\')});this.classList.add(\'active\')">' + m[1] + '</button>';
+      });
+      html += '</div></div></div>';
+
+      html += '<div style="margin-top:16px;font-size:12px;color:var(--sec-text);text-align:center;">🔄 更改即时生效</div>';
+
+      document.getElementById('clawConfigContent').innerHTML = html;
+    };
+  </script>
