@@ -48,7 +48,7 @@
 最新仪表盘卡片代码已内置于 `custom_components/claw_plus/dashboard.html`。
 可直接作为 `custom:html-pro-card` 的 `content` 字段使用。
 
-仪表盘 URL: http://api.homediy.top:8123/dashboard-test/claw-control
+
 
 ### 自动化示例
 
