@@ -9,6 +9,5 @@
   "codeowners": [],
   "dependencies": [],
   "after_dependencies": ["claw_assistant"],
-  "requirements": [],
-  "icon": "custom:claw_plus"
+  "requirements": []
 }
