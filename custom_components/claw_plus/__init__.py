@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse
 from homeassistant.helpers import config_validation as cv
+from homeassistant.components import frontend
+from homeassistant.components.http import StaticPathConfig
 
 from .const import DOMAIN, CLAW_DOMAIN
 
@@ -19,6 +22,8 @@ SERVICE_SET_OPTION = "set_option"
 SERVICE_LIST_WORKSPACE = "list_workspace"
 SERVICE_READ_FILE = "read_workspace_file"
 SERVICE_WRITE_FILE = "write_workspace_file"
+
+
 
 SET_OPTION_SCHEMA = vol.Schema({
     vol.Required("key"): cv.string,
