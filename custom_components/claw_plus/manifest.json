@@ -7,6 +7,7 @@
   "issue_tracker": "https://github.com/C3H3-AI/ha-claw-plus/issues",
   "integration_type": "service",
   "iot_class": "local_polling",
+  "authors": ["@C3H3-AI"],
   "codeowners": ["@C3H3-AI"],
   "dependencies": [],
   "after_dependencies": ["claw_assistant"],
