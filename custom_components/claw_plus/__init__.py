@@ -251,79 +251,112 @@ async def _register_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 class ClawDashboardView(HomeAssistantView):
-    """Serve the Claw dashboard HTML page (inline, no external deps)."""
+    """Serve and handle the Claw dashboard (GET = HTML, POST = JSON API)."""
 
     url = f"/api/{DOMAIN}/dashboard"
     name = f"{DOMAIN}:dashboard"
     requires_auth = True
 
-    async def get(self, request):
-        """Render the dashboard page."""
-        hass = request.app["hass"]
-        
-        # Read sensor state
+    async def _get_sensor_data(self, hass):
+        """Collect all data from sensor.claw_config."""
         state = hass.states.get(f"sensor.{DOMAIN}_claw_config")
-        sensor_attrs = dict(state.attributes) if state else {}
-        
-        skills = sensor_attrs.get("skills", [])
-        docs = sensor_attrs.get("docs", [])
-        plugins = sensor_attrs.get("plugins", [])
-        user_mappings = sensor_attrs.get("user_mappings", [])
-        
-        # Collect Claw options (exclude convenience counts)
-        claw_opts = {k: v for k, v in sensor_attrs.items()
-                     if k not in ("skills", "docs", "plugins", "user_mappings",
-                                  "skills_count", "docs_count", "plugins_count",
-                                  "user_mappings_count")}
-        
-        html = _build_dashboard_html(
-            skills=skills, docs=docs, plugins=plugins,
-            user_mappings=user_mappings, claw_opts=claw_opts,
+        attrs = dict(state.attributes) if state else {}
+
+        agents = sorted(
+            e.split(".", 1)[1] for e in hass.states.async_entity_ids("conversation")
+            if e != "conversation.claw_assistant"
         )
+
+        return {
+            "attrs": attrs,
+            "agents": agents,
+            "skills": attrs.get("skills", []),
+            "docs": attrs.get("docs", []),
+            "plugins": attrs.get("plugins", []),
+            "user_mappings": attrs.get("user_mappings", []),
+        }
+
+    def _get_opt(self, attrs, key, default=""):
+        v = attrs.get(key, default)
+        return v if v is not None else default
+
+    async def get(self, request):
+        """Render the full interactive dashboard HTML."""
+        hass = request.app["hass"]
+        data = await self._get_sensor_data(hass)
+        html = _build_interactive_html(data)
         from aiohttp import web
         return web.Response(text=html, content_type="text/html; charset=utf-8")
 
+    async def post(self, request):
+        """API endpoint: read state or set an option."""
+        hass = request.app["hass"]
+        from aiohttp import web
 
-def _escape_html(text: str) -> str:
-    """Simple HTML escape."""
+        try:
+            body = await request.json()
+        except Exception:
+            # POST with no JSON body = just return state data
+            data = await self._get_sensor_data(hass)
+            return web.json_response(data)
+
+        action = body.get("action", "read")
+
+        if action == "set_option":
+            key = body.get("key")
+            value = body.get("value")
+            if key:
+                await hass.services.async_call(
+                    DOMAIN, "set_option",
+                    {"key": key, "value": value},
+                    blocking=True,
+                )
+            data = await self._get_sensor_data(hass)
+            return web.json_response({"ok": True, **data})
+
+        if action == "read":
+            data = await self._get_sensor_data(hass)
+            return web.json_response(data)
+
+        return web.json_response({"error": "unknown_action"})
+
+
+def _escape_html(text) -> str:
     return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
 
-def _build_item_rows(items: list[dict], icon: str) -> str:
-    """Build HTML table rows for a list of items."""
-    rows = ""
-    for item in items:
-        name = _escape_html(item.get("name", "?"))
-        size = item.get("size", "")
-        size_str = f" ({size}B)" if size else ""
-        rows += f'<tr><td>{icon}</td><td>{name}{size_str}</td></tr>\n'
-    return rows
+def _b(v) -> bool:
+    return v is True or v == "true" or v == 1 or v == "1"
 
 
-def _build_dashboard_html(
-    skills: list[dict], docs: list[dict], plugins: list[dict],
-    user_mappings: list[dict], claw_opts: dict,
-) -> str:
-    """Build the complete dashboard HTML page."""
-    skills_rows = _build_item_rows(skills, "⚡")
-    docs_rows = _build_item_rows(docs, "📄")
-    plugins_rows = _build_item_rows(plugins, "🔌")
+def _build_interactive_html(data: dict) -> str:
+    """Build the complete interactive dashboard (matching the original html-pro-card layout)."""
+    o = data["attrs"]
+    agents = data["agents"]
+    skills = data["skills"]
+    docs = data["docs"]
+    plugins = data["plugins"]
 
-    # User mappings
-    mappings_rows = ""
-    for m in user_mappings:
-        provider = _escape_html(m.get("provider", "?"))
-        ext_id = _escape_html(m.get("ext_id", "?"))
-        ha_user = _escape_html(m.get("ha_user_id", "?")[:12])
-        mappings_rows += f'<tr><td>🔗</td><td>{provider}</td><td><code>{ext_id}</code></td><td>→ {ha_user}</td></tr>\n'
-    
-    # Claw options
-    opts_rows = ""
-    for k, v in sorted(claw_opts.items()):
-        val = _escape_html(str(v)) if v is not None else ""
-        opts_rows += f'<tr><td>{_escape_html(str(k))}</td><td>{val}</td></tr>\n'
+    def agent_options(sel):
+        opts = ""
+        for a in agents:
+            sel_a = ' selected' if sel == f"conversation.{a}" else ""
+            opts += f'<option value="conversation.{a}"{sel_a}>{a}</option>'
+        return opts
 
-    # Colors matching HA dark theme
+    def checked(key):
+        return 'checked' if _b(o.get(key)) else ''
+
+    # Workspace docs: use live count from sensor
+    ws_count = len(docs)
+    ws_names = "".join(f'<span>{_escape_html(d.get("name","?"))}</span>' for d in docs[:15])
+
+    # Skills
+    skill_names = "".join(f'<span>{_escape_html(s.get("name","?"))}</span>' for s in skills[:15])
+
+    # Plugins
+    plugin_names = "".join(f'<span>{_escape_html(p.get("name","?"))}</span>' for p in plugins[:15])
+
     return f"""<!DOCTYPE html>
 <html lang="zh-Hans">
 <head>
@@ -333,76 +366,204 @@ def _build_dashboard_html(
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #111; color: #e0e0e0; padding: 16px; max-width: 960px; margin: 0 auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 20px; color: var(--ctxt, #1c1c1e);
+    background: transparent;
   }}
-  h1 {{ font-size: 1.4rem; margin: 16px 0 8px; color: #58a6ff; }}
-  h2 {{ font-size: 1.1rem; margin: 20px 0 8px; color: #8b949e; }}
-  .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }}
-  .card {{
-    background: #1c1c1c; border: 1px solid #303030; border-radius: 8px; padding: 12px;
+  :root {{
+    --cbg: var(--ha-card-background, var(--card-background-color, #fff));
+    --ctxt: var(--primary-text-color, #1c1c1e);
+    --csec: var(--secondary-text-color, #8e8e93);
+    --cacc: var(--accent-color, #007aff);
+    --cbd: var(--divider-color, rgba(60,60,67,0.12));
+    --cr: 12px;
   }}
-  .card h3 {{ font-size: 0.95rem; color: #58a6ff; margin-bottom: 8px; }}
-  .count {{ font-size: 1.8rem; font-weight: 700; color: #f0f0f0; }}
-  table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
-  th, td {{ text-align: left; padding: 4px 8px; border-bottom: 1px solid #282828; }}
-  th {{ color: #8b949e; font-weight: 600; }}
-  td {{ font-family: "SF Mono", Consolas, monospace; }}
-  code {{ background: #282828; padding: 1px 4px; border-radius: 3px; font-size: 0.8rem; }}
-  .refresh {{ font-size: 0.75rem; color: #666; margin: 4px 0; }}
+  .hdr {{ font-size: 22px; font-weight: 700; margin: 0 0 20px; display: flex; align-items: center; gap: 10px; letter-spacing: -0.3px; }}
+  .hdr .st {{ font-size: 12px; font-weight: 400; color: var(--csec); }}
+  .grid2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }}
+  @media (max-width: 700px) {{ .grid2 {{ grid-template-columns: 1fr; }} }}
+  .card {{ background: var(--cbg); border: 1px solid var(--cbd); border-radius: var(--cr); padding: 16px; }}
+  .card + .card {{ margin-top: 14px; }}
+  .ct {{ font-size: 11px; font-weight: 600; color: var(--csec); text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }}
+  .row {{ display: flex; align-items: center; justify-content: space-between; padding: 9px 0; gap: 12px; }}
+  .row + .row {{ border-top: 1px solid var(--cbd); }}
+  .rl {{ min-width: 0; flex: 1; }}
+  .rn {{ font-size: 14px; font-weight: 500; }}
+  .rd {{ font-size: 11px; color: var(--csec); margin-top: 1px; }}
+  .rc {{ flex-shrink: 0; display: flex; align-items: center; gap: 8px; }}
+  select.rc {{ font-size: 13px; border-radius: 8px; border: 1px solid var(--cbd); background: var(--cbg); color: var(--ctxt); padding: 6px 28px 6px 10px; cursor: pointer; max-width: 190px; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238e8e93'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }}
+  .tog {{ position: relative; width: 42px; height: 24px; cursor: pointer; display: inline-block; flex-shrink: 0; }}
+  .tog input {{ opacity: 0; width: 0; height: 0; position: absolute; }}
+  .tog-track {{ position: absolute; inset: 0; background: #e9e9ea; border-radius: 12px; transition: .25s; }}
+  .tog input:checked + .tog-track {{ background: var(--cacc); opacity: .85; }}
+  .tog-knob {{ position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: .25s cubic-bezier(.4,0,.2,1); box-shadow: 0 1px 3px rgba(0,0,0,.15); }}
+  .tog input:checked + .tog-track .tog-knob {{ transform: translateX(18px); }}
+  .btn-group {{ display: flex; gap: 4px; }}
+  .btn-group button {{ padding: 5px 14px; border: 1px solid var(--cbd); border-radius: 8px; background: transparent; color: var(--ctxt); font-size: 12px; cursor: pointer; transition: .15s; }}
+  .btn-group button.active {{ background: var(--cacc); color: #fff; border-color: var(--cacc); }}
+  .btn-group button:hover:not(.active) {{ border-color: var(--cacc); }}
+  .tog-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }}
+  @media (max-width: 700px) {{ .tog-grid {{ grid-template-columns: 1fr; }} }}
+  .tog-cell {{ display: flex; align-items: center; justify-content: space-between; background: var(--cbg); border: 1px solid var(--cbd); border-radius: 10px; padding: 10px 12px; }}
+  .tog-cell .rn {{ font-size: 13px; }}
+  .tog-cell .rd {{ font-size: 10px; }}
+  .info-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }}
+  @media (max-width: 700px) {{ .info-grid {{ grid-template-columns: 1fr; }} }}
+  .info-card {{ background: var(--cbg); border: 1px solid var(--cbd); border-radius: var(--cr); padding: 14px; }}
+  .info-card .count {{ font-size: 28px; font-weight: 700; color: var(--cacc); line-height: 1; margin-bottom: 4px; }}
+  .info-card .label {{ font-size: 13px; font-weight: 500; margin-bottom: 6px; }}
+  .info-card .items {{ font-size: 11px; color: var(--csec); line-height: 1.6; }}
+  .info-card .items span {{ display: inline-block; background: var(--cbd); border-radius: 4px; padding: 1px 6px; margin: 1px 2px; font-size: 10px; }}
+  .ftr {{ text-align: center; font-size: 11px; color: var(--csec); padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--cbd); }}
+
+  .conv-modes {{
+    display: flex; gap: 4px; align-items: center;
+  }}
+  .conv-modes button {{
+    padding: 5px 14px; border: 1px solid var(--cbd); border-radius: 8px;
+    background: transparent; color: var(--ctxt); font-size: 12px; cursor: pointer; transition: .15s;
+  }}
+  .conv-modes button.active {{
+    background: var(--cacc); color: #fff; border-color: var(--cacc);
+  }}
+  .conv-modes button:hover:not(.active) {{ border-color: var(--cacc); }}
 </style>
 </head>
 <body>
-<h1>🤖 Claw Dashboard</h1>
-<p class="refresh">自动刷新 · 数据来自 sensor.claw_config</p>
+<div class="hdr">🤖 Claw Assistant <span class="st" id="status">•</span></div>
+<div id="body">
+  <div class="grid2">
+    <div class="card">
+      <div class="ct">🤖 AI 智能体</div>
+      <div class="row">
+        <div class="rl"><div class="rn">主力智能体</div><div class="rd">主要对话 AI</div></div>
+        <select class="rc" onchange="setOpt('primary_agent',this.value)" id="sel_primary">{"<option value=''>（禁用）</option>" + agent_options(o.get("primary_agent",""))}</select>
+      </div>
+      <div class="row">
+        <div class="rl"><div class="rn">备用智能体</div><div class="rd">主力不可用时自动切换</div></div>
+        <select class="rc" onchange="setOpt('fallback_agent',this.value)" id="sel_fallback">{"<option value=''>（禁用）</option>" + agent_options(o.get("fallback_agent",""))}</select>
+      </div>
+      <div class="row">
+        <div class="rl"><div class="rn">第三智能体</div><div class="rd">可选，汇总模式使用</div></div>
+        <select class="rc" onchange="setOpt('secondary_fallback_agent',this.value)" id="sel_secondary">{"<option value=''>（禁用）</option>" + agent_options(o.get("secondary_fallback_agent",""))}</select>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ct">💬 对话设置</div>
+      <div class="row">
+        <div class="rl"><div class="rn">对话模式</div></div>
+        <div class="conv-modes" id="conv_modes">
+          <button class="{'active' if o.get('conversation_mode','add_name')=='no_name' else ''}" data-mode="no_name">简单</button>
+          <button class="{'active' if o.get('conversation_mode','add_name')=='add_name' else ''}" data-mode="add_name">带名字</button>
+          <button class="{'active' if o.get('conversation_mode','add_name')=='detailed' else ''}" data-mode="detailed">详细</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="rl"><div class="rn">联网搜索</div></div>
+        <label class="tog"><input type="checkbox" {checked('enable_web_search')} onchange="setOpt('enable_web_search',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label>
+      </div>
+      <div class="row">
+        <div class="rl"><div class="rn">持续对话</div><div class="rd">保持上下文不中断</div></div>
+        <label class="tog"><input type="checkbox" {checked('continuous_conversation')} onchange="setOpt('continuous_conversation',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label>
+      </div>
+      <div class="row">
+        <div class="rl"><div class="rn">流式效果</div></div>
+        <label class="tog"><input type="checkbox" {checked('enable_streaming_effect')} onchange="setOpt('enable_streaming_effect',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label>
+      </div>
+    </div>
+  </div>
 
-<div class="grid">
   <div class="card">
-    <h3>⚡ 技能</h3>
-    <div class="count">{len(skills)}</div>
+    <div class="ct">⚙️ 功能开关</div>
+    <div class="tog-grid">
+      <div class="tog-cell"><div class="rl"><div class="rn">联网搜索</div><div class="rd">对话中自动搜索网络</div></div><label class="tog"><input type="checkbox" {checked('enable_web_search')} onchange="setOpt('enable_web_search',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+      <div class="tog-cell"><div class="rl"><div class="rn">流式效果</div><div class="rd">实时流式输出</div></div><label class="tog"><input type="checkbox" {checked('enable_streaming_effect')} onchange="setOpt('enable_streaming_effect',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+      <div class="tog-cell"><div class="rl"><div class="rn">文件上传</div><div class="rd">允许上传文件给 AI</div></div><label class="tog"><input type="checkbox" {checked('enable_file_upload')} onchange="setOpt('enable_file_upload',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+      <div class="tog-cell"><div class="rl"><div class="rn">富文本 Markdown</div><div class="rd">美化 Markdown 渲染</div></div><label class="tog"><input type="checkbox" {checked('enable_rich_markdown')} onchange="setOpt('enable_rich_markdown',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+      <div class="tog-cell"><div class="rl"><div class="rn">工具详情</div><div class="rd">显示工具调用细节</div></div><label class="tog"><input type="checkbox" {checked('enable_tool_details')} onchange="setOpt('enable_tool_details',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+      <div class="tog-cell"><div class="rl"><div class="rn">工具进度</div><div class="rd">显示工具执行进度</div></div><label class="tog"><input type="checkbox" {checked('enable_tool_progress')} onchange="setOpt('enable_tool_progress',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+      <div class="tog-cell"><div class="rl"><div class="rn">侧边栏</div><div class="rd">显示 Claw 侧边栏</div></div><label class="tog"><input type="checkbox" {checked('enable_sidebar_dock')} onchange="setOpt('enable_sidebar_dock',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+      <div class="tog-cell"><div class="rl"><div class="rn">状态栏</div><div class="rd">显示上下文状态栏</div></div><label class="tog"><input type="checkbox" {checked('enable_context_status_bar')} onchange="setOpt('enable_context_status_bar',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+      <div class="tog-cell"><div class="rl"><div class="rn">活动追踪</div><div class="rd">追踪用户活动</div></div><label class="tog"><input type="checkbox" {checked('enable_activity_tracking')} onchange="setOpt('enable_activity_tracking',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+      <div class="tog-cell"><div class="rl"><div class="rn">声音通知</div><div class="rd">操作提示音</div></div><label class="tog"><input type="checkbox" {checked('enable_sound_notifications')} onchange="setOpt('enable_sound_notifications',this.checked)"><span class="tog-track"><span class="tog-knob"></span></span></label></div>
+    </div>
   </div>
-  <div class="card">
-    <h3>📄 文档</h3>
-    <div class="count">{len(docs)}</div>
-  </div>
-  <div class="card">
-    <h3>🔌 插件</h3>
-    <div class="count">{len(plugins)}</div>
-  </div>
-  <div class="card">
-    <h3>🔗 用户映射</h3>
-    <div class="count">{len(user_mappings)}</div>
-  </div>
-</div>
 
-<h2>📋 明细</h2>
-<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">
-  <div class="card">
-    <h3>⚡ 技能 ({len(skills)})</h3>
-    <table>{"<tr><th></th><th>名称</th></tr>" if skills_rows else ""}{skills_rows or "<p style='color:#666;'>无</p>"}</table>
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="count" id="cnt_docs">{len(docs)}</div>
+      <div class="label">📄 工作区文档</div>
+      <div class="items">{ws_names or '<span style="background:transparent">暂无</span>'}</div>
+    </div>
+    <div class="info-card">
+      <div class="count" id="cnt_skills">{len(skills)}</div>
+      <div class="label">🌟 已安装技能</div>
+      <div class="items">{skill_names or '<span style="background:transparent">暂无</span>'}</div>
+    </div>
+    <div class="info-card">
+      <div class="count" id="cnt_plugins">{len(plugins)}</div>
+      <div class="label">🔗 已安装插件</div>
+      <div class="items">{plugin_names or '<span style="background:transparent">暂无</span>'}</div>
+    </div>
   </div>
-  <div class="card">
-    <h3>📄 文档 ({len(docs)})</h3>
-    <table>{"<tr><th></th><th>名称</th></tr>" if docs_rows else ""}{docs_rows or "<p style='color:#666;'>无</p>"}</table>
-  </div>
-  <div class="card">
-    <h3>🔌 插件 ({len(plugins)})</h3>
-    <table>{"<tr><th></th><th>名称</th></tr>" if plugins_rows else ""}{plugins_rows or "<p style='color:#666;'>无</p>"}</table>
-  </div>
-  <div class="card">
-    <h3>🔗 用户映射 ({len(user_mappings)})</h3>
-    <table>{"<tr><th></th><th>平台</th><th>外部ID</th><th>HA用户</th></tr>" if mappings_rows else ""}{mappings_rows or "<p style='color:#666;'>无</p>"}</table>
-  </div>
-</div>
 
-<h2>⚙️ Claw 选项</h2>
-<div class="card">
-  <table>{"<tr><th>键</th><th>值</th></tr>" if opts_rows else ""}{opts_rows or "<p style='color:#666;'>无</p>"}</table>
+  <div class="ftr">
+    ⚡ 更改即时生效 · 在 Claw Assistant 配置流中编辑工作区/技能/插件 · v1.2.0
+  </div>
 </div>
 
 <script>
-  // Auto-refresh every 60 seconds
-  setTimeout(function() {{ location.reload(); }}, 60000);
+// REST API helper — POST to the same URL
+var API = window.location.pathname;
+
+function setOpt(key, value) {{
+  fetch(API, {{
+    method: 'POST',
+    headers: {{ 'Content-Type': 'application/json' }},
+    body: JSON.stringify({{ action: 'set_option', key: key, value: value }})
+  }})
+  .then(function(r) {{ return r.json(); }})
+  .then(function(d) {{ if (d.error) console.error(d.error); }});
+}}
+
+// Conversation mode buttons
+document.getElementById('conv_modes').addEventListener('click', function(e) {{
+  var btn = e.target.closest('button');
+  if (!btn || !btn.dataset.mode) return;
+  btn.parentElement.querySelectorAll('button').forEach(function(b) {{ b.classList.remove('active'); }});
+  btn.classList.add('active');
+  setOpt('conversation_mode', btn.dataset.mode);
+}});
+
+// Status timer
+(function updateStatus() {{
+  document.getElementById('status').textContent = '\\u2022 ' + new Date().toLocaleTimeString('zh-CN', {{ hour:'2-digit', minute:'2-digit' }});
+  setTimeout(updateStatus, 30000);
+}})();
+
+// Auto-refresh sensor data every 30 seconds
+function refreshData() {{
+  fetch(API, {{ method: 'POST', headers: {{ 'Content-Type': 'application/json' }}, body: '{{"action":"read"}}' }})
+  .then(function(r) {{ return r.json(); }})
+  .then(function(d) {{
+    if (d.attrs) {{
+      var o = d.attrs;
+      // Update conversation mode buttons
+      var curMode = o.conversation_mode || 'add_name';
+      var modeBtns = document.getElementById('conv_modes');
+      if (modeBtns) {{
+        modeBtns.querySelectorAll('button').forEach(function(b) {{
+          b.classList.toggle('active', b.dataset.mode === curMode);
+        }});
+      }}
+      // Update counts
+      if (d.docs) document.getElementById('cnt_docs').textContent = d.docs.length;
+      if (d.skills) document.getElementById('cnt_skills').textContent = d.skills.length;
+      if (d.plugins) document.getElementById('cnt_plugins').textContent = d.plugins.length;
+    }}
+  }});
+}}
+setInterval(refreshData, 30000);
 </script>
 </body>
 </html>"""
