@@ -69,6 +69,32 @@ def _list_plugins(base: str) -> list[dict]:
     return items
 
 
+def _load_user_mappings(hass: HomeAssistant) -> list[dict]:
+    """Load IM user mappings from Claw's workspace/user_mapping.yaml."""
+    try:
+        import yaml
+    except ImportError:
+        return []
+    mapping_path = os.path.join(
+        hass.config.config_dir,
+        ".storage", "claw_assistant", "workspace", "user_mapping.yaml",
+    )
+    if not os.path.isfile(mapping_path):
+        return []
+    try:
+        with open(mapping_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            entries = data.get("mappings")
+            if isinstance(entries, list):
+                return entries
+    except Exception as exc:
+        _LOGGER.warning("Failed to load user mappings: %s", exc)
+    return []
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -102,6 +128,7 @@ class ClawConfigSensor(SensorEntity):
         self._skills = []
         self._docs = []
         self._plugins = []
+        self._user_mappings = []
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -124,6 +151,8 @@ class ClawConfigSensor(SensorEntity):
         attrs["skills_count"] = len(self._skills)
         attrs["docs_count"] = len(self._docs)
         attrs["plugins_count"] = len(self._plugins)
+        attrs["user_mappings"] = self._user_mappings
+        attrs["user_mappings_count"] = len(self._user_mappings)
         return attrs
 
     async def async_update(self) -> None:
@@ -133,4 +162,10 @@ class ClawConfigSensor(SensorEntity):
         self._skills = await self.hass.async_add_executor_job(_list_skills, base)
         self._docs = await self.hass.async_add_executor_job(_list_docs, base)
         self._plugins = await self.hass.async_add_executor_job(_list_plugins, base)
-        _LOGGER.info("CLAW_PLUS sensor updated: %d skills, %d docs, %d plugins", len(self._skills), len(self._docs), len(self._plugins))
+        self._user_mappings = await self.hass.async_add_executor_job(
+            _load_user_mappings, self.hass
+        )
+        _LOGGER.info(
+            "CLAW_PLUS sensor updated: %d skills, %d docs, %d plugins, %d user_mappings",
+            len(self._skills), len(self._docs), len(self._plugins), len(self._user_mappings),
+        )

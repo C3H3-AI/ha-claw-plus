@@ -1,7 +1,7 @@
 {
   "domain": "claw_plus",
   "name": "Claw Dashboard Config",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "config_flow": true,
   "documentation": "https://github.com/C3H3-AI/ha-claw-plus",
   "issue_tracker": "https://github.com/C3H3-AI/ha-claw-plus/issues",
