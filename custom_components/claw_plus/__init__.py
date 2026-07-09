@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse
 from homeassistant.helpers import config_validation as cv
 from homeassistant.components import frontend
-from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.http import HomeAssistantView, StaticPathConfig
 
 from .const import DOMAIN, CLAW_DOMAIN
 
@@ -216,7 +216,196 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register(DOMAIN, SERVICE_WRITE_FILE, handle_write_file, schema=WRITE_FILE_SCHEMA, supports_response=True)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    # ── Register dashboard panel ──
+    await _register_dashboard(hass, entry)
+
     return True
+
+
+async def _register_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Register the built-in panel and API view for Claw dashboard."""
+    # Serve static assets from www/
+    www_path = Path(__file__).parent / "www"
+    if www_path.is_dir():
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(f"/{DOMAIN}/www", str(www_path), False),
+        ])
+
+    # Register dashboard JSON API view
+    hass.http.register_view(ClawDashboardView)
+
+    # Register sidebar panel (iframe to the dashboard HTML)
+    # The panel loads an inline HTML page rendered by the API view
+    from homeassistant.components import frontend
+    frontend.async_register_built_in_panel(
+        hass,
+        "iframe",
+        "Claw",
+        "mdi:tune",
+        f"/api/{DOMAIN}/dashboard",
+        require_admin=True,
+    )
+
+    _LOGGER.info("CLAW_PLUS dashboard panel registered")
+
+
+class ClawDashboardView(HomeAssistantView):
+    """Serve the Claw dashboard HTML page (inline, no external deps)."""
+
+    url = f"/api/{DOMAIN}/dashboard"
+    name = f"{DOMAIN}:dashboard"
+    requires_auth = True
+
+    async def get(self, request):
+        """Render the dashboard page."""
+        hass = request.app["hass"]
+        
+        # Read sensor state
+        state = hass.states.get(f"sensor.{DOMAIN}_claw_config")
+        sensor_attrs = dict(state.attributes) if state else {}
+        
+        skills = sensor_attrs.get("skills", [])
+        docs = sensor_attrs.get("docs", [])
+        plugins = sensor_attrs.get("plugins", [])
+        user_mappings = sensor_attrs.get("user_mappings", [])
+        
+        # Collect Claw options (exclude convenience counts)
+        claw_opts = {k: v for k, v in sensor_attrs.items()
+                     if k not in ("skills", "docs", "plugins", "user_mappings",
+                                  "skills_count", "docs_count", "plugins_count",
+                                  "user_mappings_count")}
+        
+        html = _build_dashboard_html(
+            skills=skills, docs=docs, plugins=plugins,
+            user_mappings=user_mappings, claw_opts=claw_opts,
+        )
+        from aiohttp import web
+        return web.Response(text=html, content_type="text/html; charset=utf-8")
+
+
+def _escape_html(text: str) -> str:
+    """Simple HTML escape."""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+
+def _build_item_rows(items: list[dict], icon: str) -> str:
+    """Build HTML table rows for a list of items."""
+    rows = ""
+    for item in items:
+        name = _escape_html(item.get("name", "?"))
+        size = item.get("size", "")
+        size_str = f" ({size}B)" if size else ""
+        rows += f'<tr><td>{icon}</td><td>{name}{size_str}</td></tr>\n'
+    return rows
+
+
+def _build_dashboard_html(
+    skills: list[dict], docs: list[dict], plugins: list[dict],
+    user_mappings: list[dict], claw_opts: dict,
+) -> str:
+    """Build the complete dashboard HTML page."""
+    skills_rows = _build_item_rows(skills, "⚡")
+    docs_rows = _build_item_rows(docs, "📄")
+    plugins_rows = _build_item_rows(plugins, "🔌")
+
+    # User mappings
+    mappings_rows = ""
+    for m in user_mappings:
+        provider = _escape_html(m.get("provider", "?"))
+        ext_id = _escape_html(m.get("ext_id", "?"))
+        ha_user = _escape_html(m.get("ha_user_id", "?")[:12])
+        mappings_rows += f'<tr><td>🔗</td><td>{provider}</td><td><code>{ext_id}</code></td><td>→ {ha_user}</td></tr>\n'
+    
+    # Claw options
+    opts_rows = ""
+    for k, v in sorted(claw_opts.items()):
+        val = _escape_html(str(v)) if v is not None else ""
+        opts_rows += f'<tr><td>{_escape_html(str(k))}</td><td>{val}</td></tr>\n'
+
+    # Colors matching HA dark theme
+    return f"""<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claw Dashboard</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #111; color: #e0e0e0; padding: 16px; max-width: 960px; margin: 0 auto;
+  }}
+  h1 {{ font-size: 1.4rem; margin: 16px 0 8px; color: #58a6ff; }}
+  h2 {{ font-size: 1.1rem; margin: 20px 0 8px; color: #8b949e; }}
+  .grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }}
+  .card {{
+    background: #1c1c1c; border: 1px solid #303030; border-radius: 8px; padding: 12px;
+  }}
+  .card h3 {{ font-size: 0.95rem; color: #58a6ff; margin-bottom: 8px; }}
+  .count {{ font-size: 1.8rem; font-weight: 700; color: #f0f0f0; }}
+  table {{ width: 100%; border-collapse: collapse; font-size: 0.85rem; }}
+  th, td {{ text-align: left; padding: 4px 8px; border-bottom: 1px solid #282828; }}
+  th {{ color: #8b949e; font-weight: 600; }}
+  td {{ font-family: "SF Mono", Consolas, monospace; }}
+  code {{ background: #282828; padding: 1px 4px; border-radius: 3px; font-size: 0.8rem; }}
+  .refresh {{ font-size: 0.75rem; color: #666; margin: 4px 0; }}
+</style>
+</head>
+<body>
+<h1>🤖 Claw Dashboard</h1>
+<p class="refresh">自动刷新 · 数据来自 sensor.claw_config</p>
+
+<div class="grid">
+  <div class="card">
+    <h3>⚡ 技能</h3>
+    <div class="count">{len(skills)}</div>
+  </div>
+  <div class="card">
+    <h3>📄 文档</h3>
+    <div class="count">{len(docs)}</div>
+  </div>
+  <div class="card">
+    <h3>🔌 插件</h3>
+    <div class="count">{len(plugins)}</div>
+  </div>
+  <div class="card">
+    <h3>🔗 用户映射</h3>
+    <div class="count">{len(user_mappings)}</div>
+  </div>
+</div>
+
+<h2>📋 明细</h2>
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;">
+  <div class="card">
+    <h3>⚡ 技能 ({len(skills)})</h3>
+    <table>{"<tr><th></th><th>名称</th></tr>" if skills_rows else ""}{skills_rows or "<p style='color:#666;'>无</p>"}</table>
+  </div>
+  <div class="card">
+    <h3>📄 文档 ({len(docs)})</h3>
+    <table>{"<tr><th></th><th>名称</th></tr>" if docs_rows else ""}{docs_rows or "<p style='color:#666;'>无</p>"}</table>
+  </div>
+  <div class="card">
+    <h3>🔌 插件 ({len(plugins)})</h3>
+    <table>{"<tr><th></th><th>名称</th></tr>" if plugins_rows else ""}{plugins_rows or "<p style='color:#666;'>无</p>"}</table>
+  </div>
+  <div class="card">
+    <h3>🔗 用户映射 ({len(user_mappings)})</h3>
+    <table>{"<tr><th></th><th>平台</th><th>外部ID</th><th>HA用户</th></tr>" if mappings_rows else ""}{mappings_rows or "<p style='color:#666;'>无</p>"}</table>
+  </div>
+</div>
+
+<h2>⚙️ Claw 选项</h2>
+<div class="card">
+  <table>{"<tr><th>键</th><th>值</th></tr>" if opts_rows else ""}{opts_rows or "<p style='color:#666;'>无</p>"}</table>
+</div>
+
+<script>
+  // Auto-refresh every 60 seconds
+  setTimeout(function() {{ location.reload(); }}, 60000);
+</script>
+</body>
+</html>"""
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
