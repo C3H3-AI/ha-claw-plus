@@ -1133,6 +1133,8 @@ function setOpt(key, value) {
       // 直接从父窗口注入/移除脚本，即时生效
       try {
         if (value) {
+          // 清除父窗口的隐藏状态缓存，确保新注入的按钮显示
+          try { parent.localStorage.removeItem('vf_enabled'); } catch(e){}
           // 移除旧的可能存在的脚本，再注入新脚本
           var old = parent.document.querySelector('script[src*="voice_fab"]');
           if (old) old.remove();

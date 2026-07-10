@@ -48,7 +48,7 @@
     `;
 
     let wrap, btn, restoreBtn;
-    let isHidden = false;  // 每次刷新初始显示，隐藏状态不跨页面持久化
+    let isHidden = localStorage.getItem('vf_enabled') === 'false';
     let isAssistOpen = false;
 
     // 指针状态
@@ -109,6 +109,7 @@
 
     function hide(animate) {
         isHidden = true;
+        localStorage.setItem('vf_enabled', 'false');
         if (animate !== false) {
             btn.classList.add('hiding');
             setTimeout(() => { btn.style.display = 'none'; btn.classList.remove('hiding'); }, 300);
@@ -120,6 +121,7 @@
 
     function show() {
         isHidden = false;
+        localStorage.setItem('vf_enabled', 'true');
         btn.style.display = 'flex';
         btn.classList.add('showing');
         setTimeout(() => btn.classList.remove('showing'), 300);
@@ -235,7 +237,7 @@
         btn = document.createElement('button');
         btn.className = 'vf-btn';
         btn.id = 'vf-btn';
-        btn.title = '单击: 语音助手 | 双击: 回主页 | 拖动: 移动 | 长按: 隐藏';
+        btn.title = 'Tap: Voice Assistant | Double-tap: Home | Drag: Move | Hold: Hide';
         btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="rgba(128,128,128,0.9)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M12,2A3,3 0 0,1 15,5V11A3,3 0 0,1 12,14A3,3 0 0,1 9,11V5A3,3 0 0,1 12,2M12,4A1,1 0 0,0 11,5V11A1,1 0 0,0 12,12A1,1 0 0,0 13,11V5A1,1 0 0,0 12,4M17,11C17,13.76 14.76,16 12,16C9.24,16 7,13.76 7,11H5C5,14.53 7.61,17.43 11,17.92V21H13V17.92C16.39,17.43 19,14.53 19,11H17Z"/></svg>';
         wrap.appendChild(btn);
         document.body.appendChild(wrap);
@@ -244,12 +246,18 @@
         restoreBtn = document.createElement('div');
         restoreBtn.className = 'vf-restore';
         restoreBtn.id = 'vf-restore';
-        restoreBtn.title = '恢复语音助手按钮';
+        restoreBtn.title = 'Restore voice button';
         restoreBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="none" stroke="rgba(128,128,128,0.85)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M12,2A3,3 0 0,1 15,5V11A3,3 0 0,1 12,14A3,3 0 0,1 9,11V5A3,3 0 0,1 12,2M12,4A1,1 0 0,0 11,5V11A1,1 0 0,0 12,12A1,1 0 0,0 13,11V5A1,1 0 0,0 12,4M17,11C17,13.76 14.76,16 12,16C9.24,16 7,13.76 7,11H5C5,14.53 7.61,17.43 11,17.92V21H13V17.92C16.39,17.43 19,14.53 19,11H17Z"/></svg>';
         document.body.appendChild(restoreBtn);
 
         // 设置默认位置
         setDefaultPos();
+
+        // 初始隐藏状态（如果上次长按隐藏了）
+        if (isHidden) {
+            btn.style.display = 'none';
+            restoreBtn.classList.add('show');
+        }
 
         // 指针事件
         btn.addEventListener('pointerdown', onPointerDown);
