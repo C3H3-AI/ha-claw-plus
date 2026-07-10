@@ -502,7 +502,7 @@ async def _register_dashboard(hass: HomeAssistant, entry: ConfigEntry) -> None:
         hass,
         "iframe",
         "Claw Assistant Control",
-        "mdi:claw",
+        "mdi:robot-happy",
         "claw",
         config={"url": f"/api/{DOMAIN}/dashboard"},
         require_admin=True,
