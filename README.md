@@ -360,5 +360,6 @@ data:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3.1 | 2026-07-10 | fix sidebar icon (mdi:claw → mdi:robot-happy); restore localStorage for FAB hide/show + panel toggle state |
 | 1.1.0 | 2026-05-29 | Added `list_workspace` / `read_workspace_file` / `write_workspace_file` services; embedded dashboard card |
 | 1.0.0 | 2026-05-28 | Initial release: `sensor.claw_config` + `set_option` service |
