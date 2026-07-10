@@ -107,7 +107,12 @@ async def async_setup_entry(
     hass.data.setdefault('_sensors', [])
     hass.data[DOMAIN]['_sensors'] = hass.data[DOMAIN].get('_sensors', [])
     hass.data[DOMAIN]['_sensors'].append(sensor)
-    _LOGGER.info("CLAW_PLUS sensor registered")
+    # Store the actual entity_id so the dashboard view can read it correctly.
+    # HA auto-generates entity_id as "sensor.{device_name}_{entity_name}" (here:
+    # "Claw Dashboard Config" + "Claw Config" = "sensor.claw_dashboard_config_claw_config"),
+    # which is NOT predictable from DOMAIN alone.
+    hass.data[DOMAIN]['claw_config_entity_id'] = sensor.entity_id
+    _LOGGER.info("CLAW_PLUS sensor registered as %s", sensor.entity_id)
 
     return True
 
@@ -115,7 +120,7 @@ async def async_setup_entry(
 class ClawConfigSensor(SensorEntity):
 
     _attr_has_entity_name = True
-    _attr_icon = "mdi:tune"
+    _attr_icon = "mdi:claw"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_should_poll = True
 
@@ -134,9 +139,9 @@ class ClawConfigSensor(SensorEntity):
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(
             identifiers={(DOMAIN, self._entry.entry_id)},
-            name="Claw Dashboard Config",
-            manufacturer="claw_plus",
-            model="Config Plus",
+            name="Claw Assistant",
+            manufacturer="Claw",
+            model="Claw Plus",
         )
 
     @property

@@ -1,0 +1,416 @@
+{
+  "title": "Claw Assistant",
+  "selector": {
+    "conversation_mode": {
+      "options": {
+        "no_name": "Simple",
+        "add_name": "Show source",
+        "detailed": "Multi-model"
+      }
+    },
+    "provider": {
+      "options": {
+        "feishu": "Feishu",
+        "wechat": "WeChat",
+        "dingtalk": "DingTalk",
+        "qq": "QQ",
+        "wecom": "WeCom",
+        "xiaoyi": "XiaoYi",
+        "custom": "Custom"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "heartbeat": {
+        "name": "Heartbeat"
+      }
+    }
+  },
+  "config": {
+    "step": {
+      "user": {
+        "title": "Initial Setup",
+        "description": "## Welcome to Claw Assistant\n\nThe **AI orchestration hub and decision-making brain** for Home Assistant.\n\n**Plugin Architecture** — Every conversation agent you install (OpenAI, Google AI, Ollama, local models, etc.) plugs in as a capability module, with Claw Assistant handling unified orchestration, intelligent failover, and deep capability enhancement.\n\n**Natural Language Driven** — Turns the previously impossible into reality, endowing AI with autonomous evolution and persistent memory.\n\n**Zero Barrier to Use** — Supports any creative capability you envision. Simply speak to AI in the most straightforward language, it is fully capable of grasping your intent.\n\n**Synergy as Evolution** — Each capability alone is merely a tool. In concert, AI becomes an around-the-clock intelligent home operator: auditing logs, tracing history, repairing automations, reorganizing dashboards, distilling lessons learned, making every decision sharper than the last.\n\n---\n\nPlease **restart Home Assistant** after first install. Click **Submit** to begin setup."
+      },
+      "agent_settings": {
+        "title": "Configure AI Agents",
+        "description": "Select the conversation agents to use. The system tries each in order until a valid reply is obtained.\n\n▸ **Primary AI** — The default agent that responds first\n▸ **Backup AI** — Takes over automatically when the primary fails\n▸ **Summary AI** — Optional. Both AIs answer separately, then this one summarizes",
+        "data": {
+          "primary_agent": "Primary AI entity",
+          "fallback_agent": "Backup AI entity",
+          "secondary_fallback_agent": "Summary AI entity (optional)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configuration Center",
+        "description": "Select a feature area to manage",
+        "menu_options": {
+          "agent_settings": "Configure AI Agents | Primary, fallback, summarizer chain",
+          "conversation_settings": "Tune Conversation Style | Display, streaming & dimensions",
+          "workspace_editor": "Edit Workspace Docs | Master prompt & skill library",
+          "skill_editor": "Manage Installed Skills | Live view & edit",
+          "plugin_manager": "Manage Plugins | Hermes compatible plugins"
+        }
+      },
+      "agent_settings": {
+        "title": "Agent Settings",
+        "description": "Configure the AI conversation routing chain. The system tries each agent in order until a valid reply is obtained.\n\n▸ **Primary AI** — The default agent used first\n▸ **Backup AI** — Automatically used when the primary AI fails\n▸ **Summary AI** — Optional. Both AIs answer separately, then this AI summarizes",
+        "data": {
+          "back": "Return to main menu",
+          "save_and_exit": "Save and complete",
+          "next_step": "Next step",
+          "primary_agent": "Primary AI entity",
+          "fallback_agent": "Backup AI entity",
+          "secondary_fallback_agent": "Summary AI entity (optional)"
+        }
+      },
+      "conversation_settings": {
+        "title": "Conversation Settings",
+        "description": "Adjust AI conversation strategy, chat experience, execution control, and user linking.",
+        "menu_options": {
+          "conv_dialog": "Conversation Strategy | How Replies Are Generated",
+          "conv_display": "Chat Experience | How Chat Is Used",
+          "conv_runtime": "Execution Control | How Tasks Run",
+          "user_mapping": "User Linking | Channel Identity Mapping"
+        }
+      },
+      "conv_dialog": {
+        "title": "Conversation Strategy",
+        "description": "Configure how AI decides and generates replies.",
+        "data": {
+          "back": "Back to previous menu",
+          "save_and_exit": "Save and complete",
+          "next_step": "Next step",
+          "conversation_mode": "Dialogue Mode",
+          "enable_web_search": "Web Search"
+        },
+        "data_description": {
+          "conversation_mode": "• **Simple** — Show only the final reply, no AI attribution\n• **Show source** — Recommended. Prefixes each reply with the responding AI's name, e.g. (deepseek) Reply:\n• **Multi-model** — All configured AIs answer the same question simultaneously, each labeled and separated",
+          "enable_web_search": "When enabled, the AI can automatically supplement replies with online search results"
+        },
+        "sections": {
+          "reply_policy": {
+            "name": "Reply Policy",
+            "description": "Control reply style and web search.",
+            "data": {
+              "conversation_mode": "Dialogue Mode",
+              "enable_web_search": "Web Search"
+            },
+            "data_description": {
+              "conversation_mode": "• **Simple** — Show only the final reply, no AI attribution\n• **Show source** — Recommended. Prefixes each reply with the responding AI's name, e.g. (deepseek) Reply:\n• **Multi-model** — All configured AIs answer the same question simultaneously, each labeled and separated",
+              "enable_web_search": "When enabled, the AI can automatically supplement replies with online search results"
+            }
+          }
+        }
+      },
+      "conv_display": {
+        "title": "Chat Experience",
+        "description": "Configure chat interaction and display behavior.",
+        "data": {
+          "back": "Back to previous menu",
+          "save_and_exit": "Save and complete",
+          "next_step": "Next step",
+          "enable_sidebar_dock": "AI Sidebar",
+          "enable_tool_details": "Tool Call Details",
+          "enable_tool_progress": "Tool Call Progress",
+          "continuous_conversation": "Continuous Chat Window",
+          "enable_sound_notifications": "Sound Notifications",
+          "enable_context_status_bar": "Context Status Bar",
+          "enable_file_upload": "File Upload",
+          "enable_rich_markdown": "Rich Markdown",
+          "enable_activity_tracking": "Activity Awareness"
+        },
+        "data_description": {
+          "enable_sidebar_dock": "When enabled, AI conversations are displayed as a fixed right sidebar alongside the main interface; when disabled, the default floating dialog is used.",
+          "enable_tool_details": "When enabled, shows full tool call cards (parameters, results, timing) in AI replies. When disabled, only concise progress text is shown.",
+          "enable_tool_progress": "When enabled, shows live tool execution progress in the chat (e.g. querying devices, searching). When disabled, tools run silently — ideal for voice pipelines.",
+          "continuous_conversation": "When enabled, reopening or activating the frontend chat keeps using the same conversation until /new is sent. Disabled keeps the current per-window behavior.",
+          "enable_sound_notifications": "When enabled, plays notification sounds on key events like reply completion and errors. When disabled, all sounds are muted.",
+          "enable_context_status_bar": "When enabled, shows context tokens, window age, and current reply elapsed time above the chat input.",
+          "enable_file_upload": "When enabled, shows an attach button in the chat input for uploading images, videos, and documents via drag, paste, or click.",
+          "enable_rich_markdown": "When enabled, Markdown formatting (bold, tables, code blocks, etc.) is preserved and rendered as rich text; when disabled, all formatting is stripped back to plain text.",
+          "enable_activity_tracking": "When enabled, AI can sense your UI actions (page navigation, card clicks, toggle switches, etc.) to better understand what you're working on. When disabled, no actions are collected."
+        },
+        "sections": {
+          "chat_window": {
+            "name": "Chat Window",
+            "description": "Configure chat window presentation and session behavior.",
+            "data": {
+              "enable_sidebar_dock": "AI Sidebar",
+              "continuous_conversation": "Continuous Chat Window",
+              "enable_sound_notifications": "Sound Notifications"
+            },
+            "data_description": {
+              "enable_sidebar_dock": "When enabled, AI conversations are displayed as a fixed right sidebar alongside the main interface; when disabled, the default floating dialog is used.",
+              "continuous_conversation": "When enabled, reopening or activating the frontend chat keeps using the same conversation until /new is sent. Disabled keeps the current per-window behavior.",
+              "enable_sound_notifications": "When enabled, plays notification sounds on key events like reply completion and errors. When disabled, all sounds are muted."
+            }
+          },
+          "message_display": {
+            "name": "Input & Display",
+            "description": "Configure chat input and message display capabilities.",
+            "data": {
+              "enable_file_upload": "File Upload",
+              "enable_rich_markdown": "Rich Markdown",
+              "enable_activity_tracking": "Activity Awareness"
+            },
+            "data_description": {
+              "enable_file_upload": "When enabled, shows an attach button in the chat input for uploading images, videos, and documents via drag, paste, or click.",
+              "enable_rich_markdown": "When enabled, Markdown formatting (bold, tables, code blocks, etc.) is preserved and rendered as rich text; when disabled, all formatting is stripped back to plain text.",
+              "enable_activity_tracking": "When enabled, AI can sense your UI actions (page navigation, card clicks, toggle switches, etc.) to better understand what you're working on. When disabled, no actions are collected."
+            }
+          },
+          "diagnostics": {
+            "name": "Advanced Diagnostics",
+            "description": "Configure display of runtime, context, and diagnostic state.",
+            "data": {
+              "enable_tool_details": "Tool Call Details",
+              "enable_tool_progress": "Tool Call Progress",
+              "enable_context_status_bar": "Context Status Bar"
+            },
+            "data_description": {
+              "enable_tool_details": "When enabled, shows full tool call cards (parameters, results, timing) in AI replies. When disabled, only concise progress text is shown.",
+              "enable_tool_progress": "When enabled, shows live tool execution progress in the chat (e.g. querying devices, searching). When disabled, tools run silently — ideal for voice pipelines.",
+              "enable_context_status_bar": "When enabled, shows context tokens, window age, and current reply elapsed time above the chat input."
+            }
+          }
+        }
+      },
+      "conv_runtime": {
+        "title": "Execution Control",
+        "description": "Configure control rules for AI task execution.",
+        "data": {
+          "back": "Back to previous menu",
+          "save_and_exit": "Save and complete",
+          "next_step": "Next step",
+          "max_tool_repeat": "Tool Repeat Limit",
+          "identical_call_warn": "Identical Call Warning Threshold",
+          "identical_call_stop": "Identical Call Stop Threshold",
+          "pipeline_timeout": "Wait Time (min)"
+        },
+        "data_description": {
+          "max_tool_repeat": "Max times AI can call the same tool repeatedly. Once exceeded, AI is forced to stop the current approach and try alternatives or admit it cannot solve the problem",
+          "identical_call_warn": "When AI calls the same tool with identical parameters this many times, the system warns it to try a different approach",
+          "identical_call_stop": "When AI calls the same tool with identical parameters this many times, the system stops it and asks it to explain to the user",
+          "pipeline_timeout": "How long the chat window waits for AI to finish. Increase for long tasks or multi-AI chats so AI is not cut off mid-work."
+        },
+        "sections": {
+          "tool_loop": {
+            "name": "Tool Loop",
+            "description": "Limit how often AI repeats the same tool calls.",
+            "data": {
+              "max_tool_repeat": "Tool Repeat Limit",
+              "identical_call_warn": "Identical Call Warning Threshold",
+              "identical_call_stop": "Identical Call Stop Threshold"
+            },
+            "data_description": {
+              "max_tool_repeat": "Max times AI can call the same tool repeatedly. Once exceeded, AI is forced to stop the current approach and try alternatives or admit it cannot solve the problem",
+              "identical_call_warn": "When AI calls the same tool with identical parameters this many times, the system warns it to try a different approach",
+              "identical_call_stop": "When AI calls the same tool with identical parameters this many times, the system stops it and asks it to explain to the user"
+            }
+          },
+          "pipeline": {
+            "name": "Conversation Timeout",
+            "description": "Control how long a single conversation waits for AI to finish.",
+            "data": {
+              "pipeline_timeout": "Wait Time (min)"
+            },
+            "data_description": {
+              "pipeline_timeout": "How long the chat window waits for AI to finish. Increase for long tasks or multi-AI chats so AI is not cut off mid-work."
+            }
+          }
+        }
+      },
+      "workspace_editor": {
+        "title": "Workspace Document Editor",
+        "description": "**Instructions:**\nThese documents define the AI assistant's **core personality and behavior** in Markdown format.\nSelect a document to view or edit. Changes are **saved immediately** without restart.",
+        "menu_options": {
+          "ws_agents": "[AGENTS.md] — File roles & operating rules",
+          "ws_bootstrap": "[BOOTSTRAP.md] — First-run bootstrap",
+          "ws_heartbeat": "[HEARTBEAT.md] — Scheduled follow-ups",
+          "ws_identity": "[IDENTITY.md] — Assistant identity",
+          "ws_memory": "[MEMORY.md] — User preferences",
+          "ws_soul": "[SOUL.md] — Voice & style",
+          "ws_tools": "[TOOLS.md] — Environment notes",
+          "ws_user": "[USER.md] — User info"
+        }
+      },
+      "ws_agents": {
+        "title": "Edit AGENTS.md",
+        "description": "**File roles & operating rules**\nDefines responsibilities for each workspace document and AI behavioral constraints.\nLike a project README — tells the AI what each file does and what actions are allowed.\n\nMarkdown format. Saved immediately.",
+        "data": {
+          "content": "Markdown Editor"
+        }
+      },
+      "ws_bootstrap": {
+        "title": "Edit BOOTSTRAP.md",
+        "description": "**First-run bootstrap**\nOnly active on first launch. Guides the AI through initial setup (collecting user name, preferences, etc.).\nAutomatically deactivates once IDENTITY and USER are complete.\n\nMarkdown format. Saved immediately.",
+        "data": {
+          "bootstrap_active": "Enable Bootstrap",
+          "content": "Markdown Editor"
+        },
+        "data_description": {
+          "bootstrap_active": "When enabled, the AI will re-run the bootstrap flow on the next conversation; when disabled, bootstrap is skipped"
+        }
+      },
+      "ws_heartbeat": {
+        "title": "Edit HEARTBEAT.md",
+        "description": "**Scheduled follow-ups**\nDefines heartbeat behavior rules. The AI periodically executes follow-up tasks.\nExamples: check device status, send reminders, trigger automations.\n\nMarkdown format. Saved immediately.",
+        "data": {
+          "content": "Markdown Editor"
+        }
+      },
+      "ws_identity": {
+        "title": "Edit IDENTITY.md",
+        "description": "**Assistant identity**\nDefines the AI's name, creature type, personality tags, and representative emoji.\nAffects how the AI perceives itself and its reply style.\n\nExample:\n`- **Name:** My Assistant`\n`- **Creature:** AI Butler`\n\nMarkdown format. Saved immediately.",
+        "data": {
+          "content": "Markdown Editor"
+        }
+      },
+      "ws_memory": {
+        "title": "Edit MEMORY.md",
+        "description": "**User preferences**\nStores long-term user preferences and habits, one per line.\nThe AI auto-matches relevant entries based on conversation context.\n\nExample:\n`- User prefers brief replies`\n`- preferred_address: Boss`\n\nMarkdown format. Saved immediately.",
+        "data": {
+          "content": "Markdown Editor"
+        }
+      },
+      "ws_soul": {
+        "title": "Edit SOUL.md",
+        "description": "**Voice & style**\nDefines the AI's tone and personality.\nExamples: calm and direct, humorous, professionally formal.\n\nExample:\n`- Be calm, direct, practical, and concise.`\n`- Sound like a reliable operator, not a generic chatbot.`\n\nMarkdown format. Saved immediately.",
+        "data": {
+          "content": "Markdown Editor"
+        }
+      },
+      "ws_tools": {
+        "title": "Edit TOOLS.md",
+        "description": "**Environment notes**\nDevice info, service names, etc. AI references these during actions.\n\n**Access token (optional):** If AI can't read logs/run commands, add a long-lived token for REST fallback.\nCreate at: Profile → Long-Lived Access Tokens. Format: `ha_token: eyJ...`\n\nSaved immediately.",
+        "data": {
+          "content": "Markdown Editor"
+        }
+      },
+      "ws_user": {
+        "title": "Edit USER.md",
+        "description": "**User info**\nStores basic user details. The AI uses these to personalize replies.\n\nExample:\n`- **Name:** John`\n`- **What to call them:** Boss`\n`- **Timezone:** America/New_York`\n\nMarkdown format. Saved immediately.",
+        "data": {
+          "content": "Markdown Editor"
+        }
+      },
+      "skill_editor": {
+        "title": "Installed Skills",
+        "description": "**{skill_count} installed skill(s) detected.**\nPick one to view/edit its full Markdown on the next page. The list is read live from `.storage/claw_assistant/skills/`, so newly installed or removed skills appear immediately.",
+        "data": {
+          "skill_slug": "Pick a skill",
+          "back": "Back to main menu"
+        }
+      },
+      "skill_edit": {
+        "title": "Edit skill: {skill_name}",
+        "description": "**Slug:** `{skill_slug}`\n**File:** `{skill_file}`\n**Chars:** {skill_chars}\n**Description:** {skill_description}\n\nEdit the full Markdown below. Tick `Delete this skill` to remove it (recorded in the self-edit changelog). Saves take effect immediately and refresh all prompts and skill commands.",
+        "data": {
+          "content": "Markdown Editor",
+          "delete": "Delete this skill",
+          "back": "Back to skill list"
+        }
+      },
+      "plugin_manager": {
+        "title": "Installed Plugins",
+        "description": "Thanks to the Hermes Agent project, this feature specially supports **Hermes-compatible extension modules**. You can find any compatible plugins on GitHub or other platforms to provide AI with additional tool capabilities (e.g., code analysis, document retrieval, external API calls). Plugins support **hot loading**—enable/disable without restarting Home Assistant. Some plugins may lack descriptions or may not work; use **AI assistance** to explore and modify them, unlocking more capabilities.\n\n---\n**{plugin_count} installed plugins.**\nSelect a plugin to view details, or enable/disable/delete in the next step.\nList reads from `.storage/claw_assistant/plugins/` in real-time.",
+        "data": {
+          "plugin_key": "Select plugin",
+          "back": "Back to main menu"
+        }
+      },
+      "plugin_detail": {
+        "title": "Plugin: {plugin_name}",
+        "description": "**Version:** {plugin_version}\n**Status:** {plugin_status}\n**Tools:** {plugin_tools}\n**Path:** `{plugin_path}`\n\n{plugin_description}",
+        "data": {
+          "enable": "Enable this plugin",
+          "disable": "Disable this plugin",
+          "delete": "Delete this plugin",
+          "back": "Back to plugin list"
+        }
+      },
+      "plugin_delete_confirm": {
+        "title": "Delete Plugin: {plugin_name}",
+        "description": "Are you sure you want to delete this plugin? This action cannot be undone.",
+        "data": {
+          "confirm_delete": "Yes, delete this plugin",
+          "back": "Back to plugin list"
+        }
+      },
+      "user_mapping": {
+        "title": "User Linking",
+        "description": "**What this does**\nLink external IM identities (Feishu, WeChat, QQ, etc.) to HA household members. Each member gets their **own persona and conversation memory**.\n\n**Before you start**\nInstall and enable **cn_im_hub** under Settings → Devices & services, and add at least one IM channel.\n\n{cn_im_hub_status}{mapping_status}",
+        "menu_options": {
+          "um_pick_channel": "＋ Add link",
+          "um_remove": "－ Remove link"
+        },
+        "data": {
+          "back": "Back to previous menu"
+        }
+      },
+      "um_pick_channel": {
+        "title": "Add Link | Select Channel",
+        "description": "**Step 1 of 3**\n\nPick an IM channel already configured in **cn_im_hub** (Feishu, WeChat, QQ, etc.).\n\nClick **Submit** to continue to external user selection.",
+        "data": {
+          "provider": "Channel",
+          "back": "Back"
+        }
+      },
+      "um_pick_identity": {
+        "title": "Add Link | External User",
+        "description": "**Step 2 of 3**\n\nChannel: **{provider}**\n\nIdentities come from **cn_im_hub** known contacts and recent chats — **this channel only**. Choose **Manual input** if the ID is not listed.",
+        "data": {
+          "ext_id": "External User",
+          "ext_id_manual": "Manual ID",
+          "back": "Back"
+        },
+        "data_description": {
+          "ext_id": "Auto-detected from cn_im_hub and recent chats",
+          "ext_id_manual": "When Manual input is selected; no channel prefix"
+        }
+      },
+      "um_pick_member": {
+        "title": "Add Link | Household Member",
+        "description": "**Step 3 of 3**\n\n- Channel: **{provider}**\n- External user: `{ext_id}`\n\nSelect an **HA household member** and click **Submit** to save the link.\n\nMembers must already have a login under Settings → Users.",
+        "data": {
+          "ha_user": "Link to",
+          "back": "Back"
+        },
+        "data_description": {
+          "ha_user": "Household member with an existing HA user account"
+        }
+      },
+      "um_remove": {
+        "title": "Remove Link",
+        "description": "**Remove a channel link**\n\nAfter removal, that external identity is no longer linked to the member. Persona files are kept.\n\n{mapping_status}\n\nSelect a link and click **Submit** to confirm.",
+        "data": {
+          "remove_key": "Link to remove",
+          "back": "Back"
+        }
+      }
+    },
+    "error": {
+      "invalid_conversation_mode": "Dialogue mode selection is invalid",
+      "invalid_agent": "Please select a valid dialogue proxy entity",
+      "no_agents_available": "No valid conversation proxy was found, make sure at least one conversation proxy is available",
+      "no_installed_skills": "No installed skills yet. Install one via the InstallSkill AI tool.",
+      "no_installed_plugins": "No installed plugins yet. Copy Hermes-compatible plugins to the plugins directory.",
+      "cn_im_hub_not_configured": "No loaded cn_im_hub channel found. Install cn_im_hub under Settings → Devices & services and add at least one IM channel, then return here.",
+      "invalid_provider": "Select a configured channel",
+      "invalid_ext_id": "Select or enter an external user ID",
+      "missing_ha_user": "No HA user available. Make sure you are signed in.",
+      "mapping_save_failed": "Failed to save the mapping. Check the logs.",
+      "mapping_not_found": "Mapping to remove was not found"
+    },
+    "abort": {
+      "workspace_doc_saved": "Document saved and applied",
+      "plugin_load_failed": "Plugin load failed"
+    }
+  }
+}

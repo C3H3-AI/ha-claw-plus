@@ -1,0 +1,9 @@
+{
+  "entity": {
+    "sensor": {
+      "heartbeat": {
+        "name": "Heartbeat"
+      }
+    }
+  }
+}

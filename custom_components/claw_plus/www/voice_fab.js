@@ -1,46 +1,55 @@
 /** Voice Fab - 全站悬浮语音助手按钮
- * 轻触: 打开 Assist + 自动隐藏
+ * 轻触: 打开 Assist + 按钮上移一行
  * 按住拖动: 移动位置
- * 长按不拖: 隐藏
- * 右上角小图标: 恢复显示
+ * 长按不拖: 隐藏按钮
+ * 关闭 Assist: 按钮回到默认位置
  */
 (function() {
     'use strict';
 
     const STORAGE_KEY_ENABLED = 'vf_enabled';
     const STORAGE_KEY_POS = 'vf_pos';
-    const DRAG_THRESHOLD = 8; // 超过8px才算拖动
+    const DRAG_THRESHOLD = 8;
+
+    // 默认位置：右下角
+    const DEFAULT_POS = { right: 24, bottom: 24 };
+    // Assist 打开时：右下角上一行
+    const ASSIST_POS = { right: 24, bottom: 80 };
 
     const STYLES = `
-        .vf-wrap{position:fixed;z-index:999999;user-select:none;-webkit-user-select:none;touch-action:none;}
+        .vf-wrap{
+            position:fixed;z-index:999999;
+            user-select:none;-webkit-user-select:none;touch-action:none;
+            transition:left 0.4s ease,top 0.4s ease,right 0.4s ease,bottom 0.4s ease;
+        }
+        .vf-wrap.no-transition{transition:none;}
         .vf-btn{
             width:56px;height:56px;border-radius:50%;
-            background:linear-gradient(135deg,#6366f1,#8b5cf6);
-            color:#fff;border:none;
-            box-shadow:0 4px 16px rgba(99,102,241,0.35);
+            background:rgba(128,128,128,0.05);border:1.5px solid rgba(128,128,128,0.6);box-shadow:none;
             cursor:pointer;font-size:24px;
             display:flex;align-items:center;justify-content:center;
             transition:transform 0.2s,opacity 0.3s;
         }
         .vf-btn:active{transform:scale(0.92);}
         .vf-btn.dragging{opacity:0.8;transform:scale(1.05);transition:none;}
-        .vf-btn.hiding{opacity:0;transform:scale(0.3) translateY(-40px);pointer-events:none;}
+        .vf-btn.hiding{opacity:0;transform:scale(0.3);pointer-events:none;}
         .vf-btn.showing{animation:vf-pop-in 0.3s ease-out;}
-        @keyframes vf-pop-in{0%{opacity:0;transform:scale(0.3) translateY(-20px);}100%{opacity:1;transform:scale(1) translateY(0);}}
+        @keyframes vf-pop-in{0%{opacity:0;transform:scale(0.3);}100%{opacity:1;transform:scale(1);}}
         /* 右上角恢复小图标 */
         .vf-restore{
             position:fixed;top:60px;right:16px;z-index:999998;
             width:36px;height:36px;border-radius:50%;
-            background:rgba(99,102,241,0.15);border:1.5px solid rgba(99,102,241,0.3);
+            background:rgba(128,128,128,0.03);border:1.5px solid rgba(128,128,128,0.5);
             cursor:pointer;display:none;align-items:center;justify-content:center;
-            font-size:16px;transition:all 0.3s;
+            font-size:16px;transition:opacity 0.3s;
         }
         .vf-restore.show{display:flex;}
-        .vf-restore:hover{background:rgba(99,102,241,0.3);border-color:rgba(99,102,241,0.6);transform:scale(1.1);}
+        .vf-restore:hover{opacity:0.7;}
     `;
 
     let wrap, btn, restoreBtn;
-    let isHidden = localStorage.getItem(STORAGE_KEY_ENABLED) === 'false';
+    let isHidden = false;  // 每次刷新初始显示，隐藏状态不跨页面持久化
+    let isAssistOpen = false;
 
     // 指针状态
     let pointerId = null;
@@ -48,6 +57,7 @@
     let isDragging = false;
     let hasMoved = false;
     let pressTimer = null;
+    let dblTapTimer = null;  // 双击等待计时
 
     function loadPos() {
         try { return JSON.parse(localStorage.getItem(STORAGE_KEY_POS) || '{}'); }
@@ -71,9 +81,34 @@
         }));
     }
 
+    function setDefaultPos() {
+        wrap.classList.remove('no-transition');
+        const pos = loadPos();
+        if (pos.x !== undefined && pos.y !== undefined) {
+            wrap.style.right = 'auto'; wrap.style.bottom = 'auto';
+            wrap.style.left = pos.x + 'px'; wrap.style.top = pos.y + 'px';
+        } else {
+            wrap.style.left = 'auto'; wrap.style.top = 'auto';
+            wrap.style.right = DEFAULT_POS.right + 'px';
+            wrap.style.bottom = DEFAULT_POS.bottom + 'px';
+        }
+    }
+
+    function moveToAssistPos() {
+        wrap.classList.remove('no-transition');
+        const pos = loadPos();
+        if (pos.x !== undefined && pos.y !== undefined) {
+            // 有自定义位置时，上移56px
+            wrap.style.top = (pos.y - 56) + 'px';
+        } else {
+            wrap.style.left = 'auto'; wrap.style.top = 'auto';
+            wrap.style.right = ASSIST_POS.right + 'px';
+            wrap.style.bottom = ASSIST_POS.bottom + 'px';
+        }
+    }
+
     function hide(animate) {
         isHidden = true;
-        localStorage.setItem(STORAGE_KEY_ENABLED, 'false');
         if (animate !== false) {
             btn.classList.add('hiding');
             setTimeout(() => { btn.style.display = 'none'; btn.classList.remove('hiding'); }, 300);
@@ -85,7 +120,6 @@
 
     function show() {
         isHidden = false;
-        localStorage.setItem(STORAGE_KEY_ENABLED, 'true');
         btn.style.display = 'flex';
         btn.classList.add('showing');
         setTimeout(() => btn.classList.remove('showing'), 300);
@@ -95,10 +129,10 @@
     function onPointerDown(e) {
         if (e.button !== 0) return;
         e.preventDefault();
-        
+
         pointerId = e.pointerId;
         btn.setPointerCapture(e.pointerId);
-        
+
         startX = e.clientX;
         startY = e.clientY;
         const rect = wrap.getBoundingClientRect();
@@ -117,7 +151,7 @@
 
     function onPointerMove(e) {
         if (e.pointerId !== pointerId) return;
-        
+
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -125,35 +159,60 @@
         if (dist > DRAG_THRESHOLD) {
             hasMoved = true;
             if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-            
+
             if (!isDragging) {
                 isDragging = true;
                 btn.classList.add('dragging');
+                wrap.classList.add('no-transition');
                 wrap.style.right = 'auto';
                 wrap.style.bottom = 'auto';
                 wrap.style.left = wrapStartX + 'px';
                 wrap.style.top = wrapStartY + 'px';
             }
-            
+
             wrap.style.left = (wrapStartX + dx) + 'px';
             wrap.style.top = (wrapStartY + dy) + 'px';
         }
     }
 
+    function goHome() {
+        // 返回 HA 默认主页
+        var root = document.querySelector('home-assistant');
+        if (root) {
+            root.dispatchEvent(new CustomEvent('hass-action', {
+                bubbles: true, composed: true,
+                detail: { config: { tap_action: { action: 'navigate', navigation_path: '/' } }, action: 'tap' }
+            }));
+        }
+    }
+
     function onPointerUp(e) {
         if (e.pointerId !== pointerId) return;
-        
+
         if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
         btn.classList.remove('dragging');
+        wrap.classList.remove('no-transition');
 
         if (isDragging) {
             // 拖动结束，保存位置
             const rect = wrap.getBoundingClientRect();
             savePos(rect.left, rect.top);
         } else if (!hasMoved && !isHidden) {
-            // 轻触：打开 Assist + 自动隐藏
-            openAssistDialog();
-            setTimeout(() => hide(true), 300);
+            // 轻触：判断双击还是单击
+            if (dblTapTimer) {
+                // 第二次点击 → 双击回主页
+                clearTimeout(dblTapTimer); dblTapTimer = null;
+                goHome();
+            } else {
+                // 第一次点击 → 等待 300ms 判断双击
+                dblTapTimer = setTimeout(function(){
+                    dblTapTimer = null;
+                    // 单击 → 打开 Assist
+                    openAssistDialog();
+                    isAssistOpen = true;
+                    setTimeout(function(){ moveToAssistPos(); }, 100);
+                }, 300);
+            }
         }
 
         pointerId = null;
@@ -176,8 +235,8 @@
         btn = document.createElement('button');
         btn.className = 'vf-btn';
         btn.id = 'vf-btn';
-        btn.title = '轻触: 语音助手 | 按住拖动: 移动 | 长按: 隐藏';
-        btn.innerHTML = '🎤';
+        btn.title = '单击: 语音助手 | 双击: 回主页 | 拖动: 移动 | 长按: 隐藏';
+        btn.innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="rgba(128,128,128,0.9)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M12,2A3,3 0 0,1 15,5V11A3,3 0 0,1 12,14A3,3 0 0,1 9,11V5A3,3 0 0,1 12,2M12,4A1,1 0 0,0 11,5V11A1,1 0 0,0 12,12A1,1 0 0,0 13,11V5A1,1 0 0,0 12,4M17,11C17,13.76 14.76,16 12,16C9.24,16 7,13.76 7,11H5C5,14.53 7.61,17.43 11,17.92V21H13V17.92C16.39,17.43 19,14.53 19,11H17Z"/></svg>';
         wrap.appendChild(btn);
         document.body.appendChild(wrap);
 
@@ -186,44 +245,39 @@
         restoreBtn.className = 'vf-restore';
         restoreBtn.id = 'vf-restore';
         restoreBtn.title = '恢复语音助手按钮';
-        restoreBtn.innerHTML = '🎤';
+        restoreBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="none" stroke="rgba(128,128,128,0.85)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M12,2A3,3 0 0,1 15,5V11A3,3 0 0,1 12,14A3,3 0 0,1 9,11V5A3,3 0 0,1 12,2M12,4A1,1 0 0,0 11,5V11A1,1 0 0,0 12,12A1,1 0 0,0 13,11V5A1,1 0 0,0 12,4M17,11C17,13.76 14.76,16 12,16C9.24,16 7,13.76 7,11H5C5,14.53 7.61,17.43 11,17.92V21H13V17.92C16.39,17.43 19,14.53 19,11H17Z"/></svg>';
         document.body.appendChild(restoreBtn);
 
-        // 恢复位置
-        const pos = loadPos();
-        if (pos.x !== undefined && pos.y !== undefined) {
-            wrap.style.right = 'auto'; wrap.style.bottom = 'auto';
-            wrap.style.left = pos.x + 'px'; wrap.style.top = pos.y + 'px';
-        } else {
-            wrap.style.right = '24px'; wrap.style.bottom = '24px';
-        }
+        // 设置默认位置
+        setDefaultPos();
 
-        // 初始隐藏状态
-        if (isHidden) {
-            btn.style.display = 'none';
-            restoreBtn.classList.add('show');
-        }
-
-        // 指针事件（直接在按钮上，手机友好）
+        // 指针事件
         btn.addEventListener('pointerdown', onPointerDown);
         btn.addEventListener('pointermove', onPointerMove);
         btn.addEventListener('pointerup', onPointerUp);
         btn.addEventListener('pointercancel', onPointerUp);
 
         // 恢复按钮
-        restoreBtn.addEventListener('click', show);
+        restoreBtn.addEventListener('click', () => {
+            show();
+            setDefaultPos();
+        });
 
-        // 监听 Assist dialog 关闭事件，自动恢复按钮
+        // 监听 Assist dialog 关闭事件，按钮回到默认位置
         document.addEventListener('dialog-closed', (e) => {
             const detail = e.detail || {};
-            if (detail.dialog === 'ha-voice-command-dialog' && isHidden) {
-                show();
+            if (detail.dialog === 'ha-voice-command-dialog') {
+                if (isHidden) {
+                    show();
+                }
+                isAssistOpen = false;
+                setDefaultPos();
             }
         });
 
         // 全局事件
-        window.addEventListener('vf-toggle', () => isHidden ? show() : hide(true));
-        window.addEventListener('vf-show', show);
+        window.addEventListener('vf-toggle', () => isHidden ? (show(), setDefaultPos()) : hide(true));
+        window.addEventListener('vf-show', () => { show(); setDefaultPos(); });
         window.addEventListener('vf-hide', () => hide(true));
     }
 
